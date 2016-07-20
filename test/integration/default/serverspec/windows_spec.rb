@@ -34,3 +34,7 @@ end
 describe command('netsh advfirewall show currentprofile logging | findstr LogAllowedConnections'), if: windows? do
   its(:stdout) { should match('Disable') }
 end
+
+describe command('netsh advfirewall show currentprofile firewallpolicy | findstr "Firewall Policy"'), if: windows? do
+  its(:stdout) { should match('BlockInbound,BlockOutbound') }
+end
