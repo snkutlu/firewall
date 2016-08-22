@@ -96,6 +96,8 @@ The default recipe creates a firewall resource with action install, and if `node
 * `default['firewall']['ufw']['defaults']` hash for template `/etc/default/ufw`
 * `default['firewall']['iptables']['defaults']` hash for default policies for 'filter' table's chains`
 
+* `default['firewall']['windows']['defaults']` hash to define inbound / outbound firewall policy on Windows platform
+
 * `default['firewall']['allow_established'] = true`, set to false if you don't want a related/established default rule on iptables
 * `default['firewall']['ipv6_enabled'] = true`, set to false if you don't want IPv6 related/established default rule on iptables (this enables ICMPv6, which is required for much of IPv6 communication)
 
@@ -121,6 +123,7 @@ The default recipe creates a firewall resource with action install, and if `node
 - `rules`: This is used internally for firewall_rule resources to append their rules. You should NOT touch this value unless you plan to supply an entire firewall ruleset at once, and skip using firewall_rule resources.
 - `disabled_zone` (firewalld only): The zone to set on firewalld when the firewall should be disabled. Can be any string in symbol form, e.g. :public, :drop, etc. Defaults to `:public.`
 - `enabled_zone` (firewalld only): The zone to set on firewalld when the firewall should be enabled. Can be any string in symbol form, e.g. :public, :drop, etc. Defaults to `:drop.`
+- `keep_existing_rules` (Windows Firewall only): If set to false, existing (not-desired / not-defined) rules will be deleted from Windows firewall ruleset. Defaults to true.
 
 #### Examples
 
@@ -137,6 +140,12 @@ end
 firewall 'default' do
   log_level :high
   action    :install
+end
+
+# Get rid of default windows firewall rules and keep only rules defined with fireeall_rule provider
+firewall 'default' do
+  keep_existing_rules false
+  action: install
 end
 ```
 
@@ -186,7 +195,11 @@ end
 
 - `redirect_port`: redirected port for rules with command `:redirect`
 
-- `logging`: may be added to enable logging for a particular rule. valid values are: `:connections`, `:packets`. In the ufw provider, `:connections` logs new connections while `:packets` logs all packets.
+- `logging`: may be added to enable logging for a particular rule (on Linux platforms) / system-wide (on Windows platform). valid values are:
+  - On Linux platforms:
+    - `:connections`, `:packets`. In the ufw provider, `:connections` logs new connections while `:packets` logs all packets.
+  - On Windows platforms:
+    - `:allowedconnections`, `:droppedconnections`. `:droppedconnections` will log only rejected / dropped connection requests, while `:allowedconnections` will log all new connections established
 
 #### Examples
 
