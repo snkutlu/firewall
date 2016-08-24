@@ -35,7 +35,7 @@ firewall_rule 'allow world to ssh' do
 end
 
 firewall_rule 'allow world to winrm' do
-  port 5989
+  port [5985,5989]
   source '0.0.0.0/0'
   only_if { windows? && node['firewall']['allow_winrm'] }
 end
