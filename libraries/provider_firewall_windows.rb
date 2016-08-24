@@ -45,6 +45,8 @@ class Chef
         new_resource.rules({}) unless new_resource.rules
         new_resource.rules['windows'] = {} unless new_resource.rules['windows']
         new_resource.rules['windows']['log'] = {}
+        new_resource.rules['windows']['block'] = {}
+        new_resource.rules['windows']['allow'] = {}
         #
         # By default logging is disabled on Windows Firewall. If no logging rules provided, these will be in effect.
         #
@@ -90,10 +92,10 @@ class Chef
 
         # Apply desired default firewall policy at the end
         current_policy = retrieve_current_policy
-        desired_inbound_policy = node['firewall']['windows']['defaults']['policy']['inbound']
-        desired_outbound_policy = node['firewall']['windows']['defaults']['policy']['outbound']
-        unless current_policy['inbound'] == desired_inbound_policy && current_policy['outbound'] == desired_outbound_policy
-          execute_rule("set currentprofile firewallpolicy #{desired_inbound_policy},#{desired_outbound_policy}")
+        desired_input_policy = node['firewall']['windows']['defaults']['policy']['input']
+        desired_output_policy = node['firewall']['windows']['defaults']['policy']['output']
+        unless current_policy['input'] == desired_input_policy && current_policy['output'] == desired_output_policy
+          execute_rule("set currentprofile firewallpolicy #{desired_input_policy},#{desired_output_policy}")
         end
         new_resource.updated_by_last_action(true)
       end
