@@ -59,7 +59,7 @@ end
   end
 end
 
-bad_ip = '192.168.99.99'
+bad_ip = '192.168.99.99/32'
 firewall_rule "block-#{bad_ip}" do
   source bad_ip
   position 49
@@ -68,7 +68,7 @@ end
 
 firewall_rule 'ipv6-source' do
   port 80
-  source '2001:db8::ff00:42:8329'
+  source '2001:db8::ff00:42:8329/128'
   command :allow
 end
 
@@ -105,3 +105,20 @@ firewall_rule 'RPC Port Range In' do
   # see https://github.com/chef-cookbooks/firewall/pull/111#issuecomment-163520156
   not_if { rhel? && node['platform_version'].to_f < 6.0 }
 end
+
+firewall_rule 'HTTP HTTPS' do
+  port [80, 443]
+  protocol :tcp
+  direction :out
+  command :allow
+end
+
+firewall_rule 'ICMP from any' do
+  direction :in
+  protocol :icmp
+  icmp_code 0
+  icmp_type 8
+  command :allow
+end
+
+include_recipe 'firewall-test::windows' if windows?
