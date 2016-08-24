@@ -10,6 +10,12 @@ provisioner:
       allow_winrm: true
       firewalld:
         permanent: true
+      windows:
+        keep_existing_rules: false
+        defaults:
+          policy:
+            input: blockinbound
+            output: blockoutbound
 
 platforms:
   - name: centos-5.11
@@ -28,6 +34,8 @@ platforms:
     run_list:
       - recipe[apt::default]
   - name: windows-2012r2
+    driver_config:
+      box: windows2012r2
 
 suites:
   - name: default
