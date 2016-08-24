@@ -54,7 +54,7 @@ module FirewallCookbook
         # Build firewall command to execute the rule
         rule = ''
         unless parameters['firewall_command'] == 'do_nothing'
-          partial_command = parameters.sort.map { |k, v| "#{k}=#{v}" unless (v == '' || k == 'firewall_command') }.join(' ')
+          partial_command = parameters.sort.map { |k, v| "#{k}=#{v}" unless v == '' || k == 'firewall_command' }.join(' ')
           partial_command = "new #{partial_command}" if parameters['firewall_command'] == 'set'
           rule = "firewall #{parameters['firewall_command']} rule name=\"#{name}\" #{partial_command}"
         end
@@ -78,47 +78,51 @@ module FirewallCookbook
         parameters = {}
         unless to_type(new_resource) == :log
           parameters['description'] = "\"#{new_resource.description}\""
-          parameters['dir'] = new_resource.direction
+          parameters['dir'] = new_resource.direction.to_s
 
           new_resource.program && parameters['program'] = "\"#{new_resource.program}\""
           new_resource.service && parameters['service'] = new_resource.service
           parameters['protocol'] = if new_resource.protocol == :icmp
-                                     :icmpv4
+                                     'icmpv4'
                                    else
-                                     new_resource.protocol
+                                     new_resource.protocol.to_s
                                    end
 
-          if parameters['protocol'].to_s.match(/icmp/)
+          if parameters['protocol'] =~ /icmp/
             if new_resource.icmp_type
-              parameters['protocol'] = "#{parameters['protocol']}:#{new_resource.icmp_type}"
-              parameters['protocol'] << ",#{new_resource.icmp_code}" if new_resource.icmp_code
+              parameters['protocol'] = "\"#{parameters['protocol']}:#{new_resource.icmp_type}"
+              if new_resource.icmp_code
+                parameters['protocol'] << ",#{new_resource.icmp_code}\""
+              else
+                parameters['protocol'] << '"'
+              end
             end
           end
 
-          if new_resource.direction.to_sym == :out
+          if new_resource.direction == :out
             parameters['localip'] = new_resource.source ? fixup_cidr(new_resource.source) : 'any'
-            parameters['localport'] = if parameters['protocol'].match(/icmp/)
+            parameters['localport'] = if parameters['protocol'] =~ /icmp/
                                         ''
                                       else
                                         new_resource.source_port ? port_to_s(new_resource.source_port) : 'any'
                                       end
             parameters['interfacetype'] = new_resource.interface ? new_resource.interface : 'any'
             parameters['remoteip'] = new_resource.destination ? fixup_cidr(new_resource.destination) : 'any'
-            parameters['remoteport'] = if parameters['protocol'].match(/icmp/)
+            parameters['remoteport'] = if parameters['protocol'] =~ /icmp/
                                          ''
                                        else
                                          new_resource.dest_port ? port_to_s(new_resource.dest_port) : 'any'
                                        end
           else
-            parameters['localip'] = new_resource.destination ? new_resource.destination : 'any'
-            parameters['localport'] = if parameters['protocol'].match(/icmp/)
+            parameters['localip'] = new_resource.destination ? fixup_cidr(new_resource.destination) : 'any'
+            parameters['localport'] = if parameters['protocol'] =~ /icmp/
                                         ''
                                       else
                                         dport_calc(new_resource) ? port_to_s(dport_calc(new_resource)) : 'any'
                                       end
             parameters['interfacetype'] = new_resource.dest_interface ? new_resource.dest_interface : 'any'
             parameters['remoteip'] = new_resource.source ? fixup_cidr(new_resource.source) : 'any'
-            parameters['remoteport'] = if parameters['protocol'].match(/icmp/)
+            parameters['remoteport'] = if parameters['protocol'] =~ /icmp/
                                          ''
                                        else
                                          new_resource.source_port ? port_to_s(new_resource.source_port) : 'any'
@@ -133,7 +137,6 @@ module FirewallCookbook
       def build_firewall_rule_hash(firewall_rule, desired_rules, current_rules)
         type = to_type(firewall_rule)
         rule_name = type == :log ? firewall_rule.logging.to_s : firewall_rule.name
-        desired_rules[type.to_s] ||= {}
 
         # If it is a logging rule handle properly
         if type == :log
@@ -144,7 +147,7 @@ module FirewallCookbook
           desired_rules[type.to_s][rule_name] = parse_desired_rule_parameters(firewall_rule)
           desired_rules[type.to_s][rule_name]['firewall_command'] = if !current_rules.key?(rule_name)
                                                                       'add'
-                                                                    elsif rule_up_to_date?(desired_rules[type.to_s][rule_name], current_rules[rule_name])
+                                                                    elsif rule_up_to_date?(desired_rules[type.to_s][rule_name], current_rules[rule_name], rule_name)
                                                                       'do_nothing'
                                                                     else
                                                                       'set'
@@ -178,8 +181,8 @@ module FirewallCookbook
         cmd = shell_out!('netsh advfirewall show currentprofile firewallpolicy')
         cmd.stdout.chomp.split(/\r\n/).each do |line|
           if line =~ /^Firewall Policy\s+(\w+),(\w+)$/
-            policy['inbound'] = Regexp.last_match(1).downcase
-            policy['outbound'] = Regexp.last_match(2).downcase
+            policy['input'] = Regexp.last_match(1).downcase
+            policy['output'] = Regexp.last_match(2).downcase
           end
         end
         policy
@@ -205,15 +208,15 @@ module FirewallCookbook
           end
           # We now have name then fill the hash for that named rule
           all_rules[name]['description'] = "\"#{Regexp.last_match(1).chomp}\"" if line =~ /^Description:\s+(.*)$/
-          all_rules[name]['dir'] = Regexp.last_match(1).chomp if line =~ /^Direction:\s+(.*)$/
+          all_rules[name]['dir'] = Regexp.last_match(1).chomp.downcase if line =~ /^Direction:\s+(.*)$/
           all_rules[name]['localip'] = Regexp.last_match(1).chomp if line =~ /^LocalIP:\s+(.*)$/
           all_rules[name]['remoteip'] = Regexp.last_match(1).chomp if line =~ /^RemoteIP:\s+(.*)$/
           # Handle protocol carefully
           if line =~ /^Protocol:\s+(.*)$/
-            all_rules[name]['protocol'] = Regexp.last_match(1).chomp
+            all_rules[name]['protocol'] = Regexp.last_match(1).chomp.downcase
             # ICMP needs speclal handling
-            if all_rules[name]['protocol'].downcase =~ /icmp/
-              all_rules[name]['protocol'] += ":#{rule_list[i + 2].chomp.split(' ')[0]},#{rule_list[i + 2].chomp.split(' ')[1]}"
+            if all_rules[name]['protocol'] =~ /icmp/
+              all_rules[name]['protocol'] = "\"#{all_rules[name]['protocol']}:#{rule_list[i + 2].chomp.split(' ')[0]},#{rule_list[i + 2].chomp.split(' ')[1]}\""
             end
           end
           all_rules[name]['localport'] = Regexp.last_match(1).chomp if line =~ /^LocalPort:\s+(.*)$/
@@ -229,17 +232,22 @@ module FirewallCookbook
       def retrieve_all_rules
         output = shell_out!('netsh advfirewall firewall show rule name=all verbose', returns: [0, 1])
         if output.exitstatus.nonzero? && output.stdout =~ /^No rules match/
-          Chef::Log.warn('"No firewall rules found')
+          Chef::Log.warn('No firewall rules found')
           {}
         else
           parse_current_rule_parameters(output.stdout.sub(/^\r\n/, '').split(/\r\n/))
         end
       end
 
-      def rule_up_to_date?(desired_rule_parameters, current_rule_parameters)
+      def rule_up_to_date?(desired_rule_parameters, current_rule_parameters, rule_name)
         up_to_date = true
         desired_rule_parameters.each do |k, v|
-          up_to_date = false if current_rule_parameters[k].to_s.downcase !~ /^["]?#{v.to_s.downcase}["]?$/i
+          if current_rule_parameters[k].to_s.downcase !~ /^["]?#{v.to_s.downcase}["]?$/i
+            up_to_date = false
+            #require 'pry'
+            #binding.pry if node['hostname'].downcase == 'argddb099'
+            Chef::Log.debug("Firewall debug: Rule is changed: Rule name: #{rule_name}, Parameter: #{k}, Current value: #{current_rule_parameters[k].to_s.downcase}, Desired value: #{v.to_s.downcase}")
+          end
         end
         up_to_date
       end
